@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Simple CSV Flashcards</title>
+<style>
+  :root { --bg:#0f172a; --panel:#0a1020; --text:#e5e7eb; --muted:#9ca3af; --border:#1f2937;
+          --good:#22c55e; --bad:#f43f5e; --accent:#22d3ee; }
+  * { box-sizing: border-box; }
+  html, body { height:100%; }
+  body { margin:0; background:var(--bg); color:var(--text);
+         font-family:-apple-system, system-ui, Segoe UI, Roboto, Inter, Arial;
+         display:flex; flex-direction:column; }
+  header { padding:12px 16px; border-bottom:1px solid var(--border);
+           position:sticky; top:0; z-index:10; background:rgba(10,16,32,0.9); backdrop-filter: blur(6px); }
+  .title { font-weight:800; letter-spacing:.3px; font-size:18px; }
+  .wrap { display:grid; grid-template-columns:1fr; gap:12px; padding:12px; max-width:960px; width:100%; margin:0 auto; }
+  .panel { background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:12px; }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  label { font-size:12px; color:var(--muted); }
+  select, input[type="text"], textarea {
+    width:100%; padding:10px 12px; border-radius:12px; border:1px solid var(--border); background:#0b1224; color:var(--text);
+  }
+  textarea { min-height: 120px; resize: vertical; }
+  .hintline { color:var(--muted); font-size:12px; }
+  .btn { padding:10px 14px; border-radius:12px; border:1px solid var(--border); background:#0b1224; color:var(--text); font-weight:700; }
+  .btn.accent { background: rgba(34,211,238,0.12); border-color: rgba(34,211,238,0.4); }
+  .btn.good { background: rgba(34,197,94,0.12); border-color: rgba(34,197,94,0.4); }
+  .btn.bad  { background: rgba(244,63,94,0.12); border-color: rgba(244,63,94,0.4); }
+  .controls { position: sticky; bottom: 0; background: rgba(10,16,32,0.9);
+              backdrop-filter: blur(6px); padding: 10px; border-top:1px solid var(--border); display:flex; gap:8px; }
+  .card { border:1px solid var(--border); border-radius:18px; padding:18px; min-height:48vh; display:flex; flex-direction:column; gap:10px;
+          background:linear-gradient(180deg, rgba(167,139,250,0.06), rgba(34,211,238,0.06)); }
+  .front, .back, .hint { white-space:pre-wrap; line-height:1.5; font-size:clamp(18px, 4.2vw, 22px); }
+  .back { display:none; border-top:1px dashed var(--border); padding-top:10px; }
+  .card.revealed .back { display:block; }
+  .meta { color:var(--muted); font-size:12px; display:flex; gap:8px; flex-wrap:wrap; }
+  .pill { padding:2px 8px; border:1px solid var(--border); border-radius:999px; }
+  .stats { display:flex; gap:8px; flex-wrap:wrap; color:var(--muted); font-size:12px; }
+  .stat { border:1px solid var(--border); border-radius:999px; padding:4px 8px; }
+  .hidden { display:none; }
+  @media (min-width: 900px) { .wrap { grid-template-columns: 360px 1fr; } }
+</style>
+</head>
+<body>
+  <header><div class="title">Simple CSV Flashcards</div></header>
+  <div class="wrap">
+    <aside class="panel">
+      <h3 style="margin:6px 0 10px;">Import CSV File</h3>
+      <div>
+        <label>Choose your flashcard CSV file</label>
+        <input id="fileInput" type="file" accept=".csv,text/csv" />
+        <div class="hintline" style="margin-top:6px;">CSV should have two columns: front and back of flashcards</div>
+      </div>
+      
+      <div style="margin-top:12px;">
+        <label>Or paste CSV text</label>
+        <textarea id="pasteBox" placeholder="term,definition&#10;hello,world&#10;..."></textarea>
+        <button id="loadPasteBtn" class="btn accent" style="margin-top:6px;">Load CSV</button>
+      </div>
+
+      <div style="margin-top:12px;" id="columnMapping" class="hidden">
+        <h4 style="margin:6px 0;">Column Mapping</h4>
+        <div class="row">
+          <div>
+            <label>Front side</label>
+            <select id="frontSel"></select>
+          </div>
+          <div>
+            <label>Back side</label>
+            <select id="backSel"></select>
+          </div>
+        </div>
+      </div>
+
+      <div class="stats" style="margin-top:12px;" id="statsSection" class="hidden">
+        <span class="stat"><span id="countStat">0</span> cards</span>
+        <span class="stat"><span id="knownStat">0</span> learned</span>
+      </div>
+      
+      <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;" id="controls" class="hidden">
+        <button id="shuffleBtn" class="btn">Shuffle</button>
+        <button id="resetBtn" class="btn">Reset Progress</button>
+      </div>
+    </aside>
+
+    <main class="panel" style="padding-bottom:72px;">
+      <div id="card" class="card">
+        <div class="meta">
+          <span id="indexPill" class="pill">—</span>
+          <span class="pill">Click to reveal • Use arrow keys</span>
+        </div>
+        <div id="front" class="front">Load a CSV to begin.</div>
+        <div id="hint" class="hint"></div>
+        <div id="back" class="back"></div>
+      </div>
+    </main>
+  </div>
+
+  <div class="controls">
+    <button id="prevBtn" class="btn">← Previous</button>
+    <button id="revealBtn" class="btn accent">Reveal Answer</button>
+    <button id="nextBtn" class="btn">Next →</button>
+    <button id="gotBtn" class="btn good">Know It</button>
+    <button id="againBtn" class="btn bad">Study Again</button>
+  </div>
+
+  <script>
+  (function() {
+    const $ = (id)=>document.getElementById(id);
+    const state = {
+      columns: [], records: [],
+      frontKey: null, backKey: null,
+      queue:[], idx:0, revealed:false,
+      datasetHash:"deck", knownSet:new Set()
+    };
+
+    function detectDelimiter(text) {
+      const first = text.split(/\r?\n/).slice(0,5).join("\n");
+      const candidates = [",","\t",";","|"];
+      let best=",", bestScore=-1;
+      for(const d of candidates){
+        // Count delimiter occurrences, but penalize if it creates too many fields
+        const parts = first.split(d);
+        const score = parts.length;
+        // Penalize delimiters that create many empty fields or inconsistent column counts
+        const emptyCount = parts.filter(p => p.trim() === "").length;
+        const adjustedScore = score - (emptyCount * 2); // Heavy penalty for empty fields
+        if(adjustedScore > bestScore && score >= 2){ // Must have at least 2 columns
+          bestScore = adjustedScore;
+          best = d;
+        }
+      }
+      return best;
+    }
+    function parseCSV(text, opts={}) {
+      const delim = opts.delim === "auto" ? detectDelimiter(text) : (opts.delim || ",");
+      const rows = []; let cur=[], val=""; let i=0, inQuotes=false;
+      while(i<text.length){
+        const ch=text[i];
+        if(inQuotes){
+          if(ch==='"'){ const peek=text[i+1]; if(peek==='"'){ val+='"'; i+=2; } else { inQuotes=false; i++; } }
+          else { val+=ch; i++; }
+        } else {
+          if(ch==='"'){ inQuotes=true; i++; }
+          else if(ch===delim){ cur.push(val); val=""; i++; }
+          else if(ch==='\n'){ cur.push(val); rows.push(cur); cur=[]; val=""; i++; }
+          else if(ch==='\r'){ if(text[i+1]==='\n') i++; cur.push(val); rows.push(cur); cur=[]; val=""; i++; }
+          else { val+=ch; i++; }
+        }
+      }
+      cur.push(val); rows.push(cur);
+      if(rows.length && rows[rows.length-1].every(x=>x==="")) rows.pop();
+      const maxCols = rows.reduce((m,r)=>Math.max(m,r.length),0);
+      for(const r of rows) while(r.length<maxCols) r.push("");
+      return { rows, delim };
+    }
+    function rowsToTable(rows, header=true) {
+      if(!rows || !rows.length) return {columns:[], records:[]};
+      let columns=[], start=0;
+      if(header){ columns = rows[0].map(x=> (x||"col").toString().trim() || "col"); start=1; }
+      else { const n=rows[0].length; for(let i=0;i<n;i++) columns.push("col_"+(i+1)); }
+      const records=[];
+      for(let r=start;r<rows.length;r++){ const rec={}; for(let c=0;c<columns.length;c++) rec[columns[c]] = rows[r][c]==null? "": String(rows[r][c]); records.push(rec); }
+      return {columns, records};
+    }
+    function fnv1a(str){ let h=2166136261>>>0; for(let i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=(h*16777619)>>>0; } return (h>>>0).toString(16); }
+    function guessKey(cols, words, fallbackIdx=0){
+      for(const c of cols){ const lc=c.toLowerCase(); for(const w of words){ if(lc.includes(w)) return c; } }
+      return cols[fallbackIdx] || cols[0] || null;
+    }
+
+    function initSelectors(){
+      const opts = state.columns.map(c=>`<option value="${encodeURIComponent(c)}">${c}</option>`).join('');
+      $('frontSel').innerHTML = opts;
+      $('backSel').innerHTML  = opts;
+
+      const setSel=(sel,key)=>{
+        if(!key){ sel.value = sel.options[0]?.value || ''; return; }
+        const val=encodeURIComponent(key);
+        const opt=[...sel.options].find(o=>o.value===val);
+        sel.value = opt ? val : (sel.options[0]?.value||'');
+      };
+      setSel($('frontSel'), state.frontKey);
+      setSel($('backSel'),  state.backKey);
+
+      $('frontSel').onchange = ()=>{ state.frontKey = decodeURIComponent($('frontSel').value); buildQueue(); render(); saveKnown(); };
+      $('backSel').onchange  = ()=>{ state.backKey  = decodeURIComponent($('backSel').value);  buildQueue(); render(); saveKnown(); };
+      
+      // Show mapping section once columns are loaded
+      $('columnMapping').classList.remove('hidden');
+      $('statsSection').classList.remove('hidden');
+      $('controls').classList.remove('hidden');
+    }
+
+    function setDeck(columns, records, datasetTag){
+      state.columns = columns||[]; state.records = records||[];
+      state.frontKey = guessKey(state.columns, ["term","front","question","word","prompt","phrase"], 0);
+      state.backKey  = guessKey(state.columns, ["definition","back","answer","meaning","translation","explanation"], Math.min(1, state.columns.length-1));
+      if(state.backKey===state.frontKey && state.columns.length>1){ state.backKey = state.columns.find(c=>c!==state.frontKey) || state.backKey; }
+      state.datasetHash = datasetTag || fnv1a(JSON.stringify({columns,records}));
+      try{
+        const raw = localStorage.getItem('flashcards_known_'+state.datasetHash);
+        state.knownSet = raw ? new Set(JSON.parse(raw)) : new Set();
+        localStorage.setItem('flashcards_deck_'+state.datasetHash, JSON.stringify({columns,records}));
+        localStorage.setItem('flashcards_last_hash', state.datasetHash);
+      } catch(e){}
+      initSelectors(); buildQueue(); render();
+    }
+
+    function buildQueue(){ const idxs=[]; for(let i=0;i<state.records.length;i++) idxs.push(i); state.queue=idxs; state.idx=0; state.revealed=false; updateStats(); }
+    function updateStats(){ $('countStat').textContent=state.queue.length; let known=0; for(const i of state.queue) if(state.knownSet.has(cardId(state.records[i]))) known++; $('knownStat').textContent=known; }
+    function cardId(rec){ return fnv1a((rec[state.frontKey]||'')+'||'+(rec[state.backKey]||'')); }
+    function render(){
+      const frontEl = $('front'), backEl = $('back'), hintEl = $('hint'), idxPill = $('indexPill');
+      if(!state.queue.length){ frontEl.textContent='Load a CSV to begin.'; backEl.textContent=''; hintEl.textContent=''; idxPill.textContent='0 / 0'; $('card').classList.remove('revealed'); return; }
+      const rec = state.records[state.queue[state.idx]];
+      const front = (rec[state.frontKey]||'').trim();
+      const back  = (rec[state.backKey]||'').trim();
+      frontEl.textContent = front || '—'; 
+      backEl.textContent = back || '—'; 
+      hintEl.textContent = '';
+      $('card').classList.toggle('revealed', state.revealed); 
+      idxPill.textContent = (state.idx+1)+' / '+state.queue.length; 
+      updateStats();
+    }
+    function saveKnown(){ try{ localStorage.setItem('flashcards_known_'+state.datasetHash, JSON.stringify([...state.knownSet])); }catch(e){} }
+    function next(n){ if(!state.queue.length) return; state.idx=(state.idx+n+state.queue.length)%state.queue.length; state.revealed=false; render(); }
+    function gotIt(){ if(!state.queue.length) return; const rec=state.records[state.queue[state.idx]]; state.knownSet.add(cardId(rec)); saveKnown(); next(1); }
+    function again(){ if(!state.queue.length) return; const cur=state.queue[state.idx]; state.queue.splice(state.idx,1); const at=Math.min(state.idx+3, state.queue.length); state.queue.splice(at,0,cur); state.revealed=false; render(); }
+
+    // Controls
+    $('revealBtn').onclick = ()=>{ state.revealed = !state.revealed; render(); };
+    $('gotBtn').onclick = gotIt;
+    $('againBtn').onclick = again;
+    $('nextBtn').onclick = ()=>next(1);
+    $('prevBtn').onclick = ()=>next(-1);
+    $('card').addEventListener('click', ()=>{ state.revealed ? next(1) : (state.revealed=true, render()); });
+    (function(){ let x0=null,y0=null,t0=0; const card=$('card');
+      card.addEventListener('touchstart',(e)=>{ const p=e.changedTouches?e.changedTouches[0]:e; x0=p.clientX;y0=p.clientY;t0=Date.now(); },{passive:true});
+      card.addEventListener('touchend',(e)=>{ const p=e.changedTouches?e.changedTouches[0]:e; if(x0===null) return; const dx=p.clientX-x0, dy=p.clientY-y0, dt=Date.now()-t0; if(dt<600 && Math.abs(dx)>40 && Math.abs(dx)>Math.abs(dy)){ if(dx<0) next(1); else next(-1); } x0=y0=null; });
+    })();
+
+    // Import: File input
+    $('fileInput').addEventListener('change', async (e)=>{
+      const f = e.target.files && e.target.files[0]; if(!f) return;
+      const text = await f.text();
+      const parsed = parseCSV(text, {delim: ","});
+      const table = rowsToTable(parsed.rows, true);
+      setDeck(table.columns, table.records, fnv1a(text));
+    });
+    
+    // Import: Paste
+    $('loadPasteBtn').onclick = ()=>{
+      const text = $('pasteBox').value || ''; if(!text.trim()) return;
+      const parsed = parseCSV(text, {delim: ","});
+      const table = rowsToTable(parsed.rows, true);
+      setDeck(table.columns, table.records, fnv1a(text));
+    };
+    
+    // Additional controls
+    $('shuffleBtn').onclick = ()=>{ 
+      for(let i=state.queue.length-1;i>0;i--){ 
+        const j=Math.floor(Math.random()*(i+1)); 
+        [state.queue[i],state.queue[j]]=[state.queue[j],state.queue[i]]; 
+      } 
+      state.idx=0; state.revealed=false; render(); 
+    };
+    $('resetBtn').onclick = ()=>{ 
+      if(confirm('Reset all progress for this deck?')){ 
+        state.knownSet.clear(); saveKnown(); render(); 
+      } 
+    };
+
+    // ---- STARTUP: blank by default, but auto-load last remembered deck if present ----
+    try{
+      const last = localStorage.getItem('flashcards_last_hash');
+      if(last){
+        const deckRaw = localStorage.getItem('flashcards_deck_'+last);
+        if(deckRaw){
+          const deck = JSON.parse(deckRaw);
+          setDeck(deck.columns||[], deck.records||[], last);
+          return; // loaded last deck; done
+        }
+      }
+    }catch(e){}
+    // If no last deck, remain blank
+    render();
+  })();
+  </script>
+</body>
+</html>
